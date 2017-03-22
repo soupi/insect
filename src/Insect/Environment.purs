@@ -1,6 +1,8 @@
 module Insect.Environment
   ( Environment
   , initialEnvironment
+  , minInt
+  , maxInt
   ) where
 
 import Prelude
@@ -14,7 +16,13 @@ type Environment = StrMap Value
 
 initialEnvironment ∷ Environment
 initialEnvironment = fromFoldable
-  [ Tuple "maxInt" $ Value { value: 217483647, rep: Decimal }
-  , Tuple "minInt" $ Value { value: -217483648, rep: Decimal }
+  [ Tuple "maxInt" $ Value { value: maxInt, rep: Decimal }
+  , Tuple "minInt" $ Value { value: minInt, rep: Decimal }
   , Tuple "minus1" $ Value { value: -1, rep: Decimal }
   ]
+
+maxInt :: Int
+maxInt = 2147483647
+
+minInt :: Int
+minInt = -2147483648

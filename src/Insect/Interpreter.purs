@@ -5,16 +5,18 @@ module Insect.Interpreter
   , runInsect
   ) where
 
+import Data.Array (replicate)
 import Data.Bifunctor (lmap)
 import Data.Either (Either(Right, Left))
 import Data.Foldable (intercalate)
-import Data.Int (binary, decimal, hexadecimal, toStringAs)
+import Data.Int (binary, decimal, fromStringAs, hexadecimal, toStringAs)
 import Data.Int.Bits (and, complement, or, shl, shr, xor)
-import Data.Maybe (Maybe(..))
+import Data.Maybe (Maybe(..), fromJust)
 import Data.StrMap (lookup, insert, foldMap)
-import Debug.Trace (traceShow)
-import Insect.Environment (Environment, initialEnvironment)
+import Data.String (drop, fromCharArray, length, take)
+import Insect.Environment (Environment, initialEnvironment, maxInt, minInt)
 import Insect.Language (BinOp(..), Command(..), Expression(..), Func(..), Rep(..), Statement(..), Value(..))
+import Partial.Unsafe (unsafePartial)
 import Prelude hiding (degree)
 
 -- | Types of errors that may appear during evaluation.
@@ -117,14 +119,39 @@ message _ env (Right other) =
 prettyPrint :: Value -> String
 prettyPrint (Value { value, rep }) =
   case rep of
-    Binary -> "\\b" <> toStringAs binary value
-    Hex -> "\\x" <> toStringAs hexadecimal value
     Decimal -> toStringAs decimal value
-        
+
+    Binary -> "\\b" <>
+      if value >= 0
+        then
+          let s = toStringAs binary value
+          in fromCharArray (replicate (32 - length s) '0') <> s
+        else
+          if value == minInt
+            then fromCharArray $ ['1'] <> replicate 31 '0'
+            else
+              let s = toStringAs binary (maxInt + value + 1)
+              in "1" <> fromCharArray (replicate (31 - length s) '0') <> s 
+
+    Hex -> "\\x" <>
+      if value >= 0
+        then
+          let s = toStringAs hexadecimal value
+          in fromCharArray (replicate (8 - length s) '0') <> s
+        else
+          if value == minInt
+            then "ffffffff"
+            else
+              let str = toStringAs hexadecimal (maxInt + value + 1)
+              in
+                if length str < 8
+                  then "8" <> fromCharArray (replicate (8 - length str - 1) '0') <> str
+                  else toStringAs hexadecimal ((unsafePartial $ fromJust $ fromStringAs hexadecimal $ take 1 str) `or` 8) <> drop 1 str
+
 
 -- | Run a single statement of an Insect program.
 runInsect ∷ Environment -> Statement -> Response
-runInsect env (Expression e) = message Val env (eval env (traceShow e (const e)))
+runInsect env (Expression e) = message Val env (eval env e)
 runInsect env (Assignment n v) =
   case eval env v of
     Left evalErr -> message Error env (Left evalErr)

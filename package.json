@@ -2,6 +2,10 @@
   "name": "binsect",
   "description": "REPL-style binary calculator",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/soupi/insect.git"
+  },
   "bin": {
     "insect": "./index.js"
   },
