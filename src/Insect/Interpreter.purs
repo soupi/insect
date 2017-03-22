@@ -5,27 +5,21 @@ module Insect.Interpreter
   , runInsect
   ) where
 
-import Prelude hiding (degree)
-
 import Data.Bifunctor (lmap)
-import Data.Either (Either(..))
+import Data.Either (Either(Right, Left))
 import Data.Foldable (intercalate)
+import Data.Int (binary, decimal, hexadecimal, toStringAs)
+import Data.Int.Bits (and, complement, or, shl, shr, xor)
 import Data.Maybe (Maybe(..))
 import Data.StrMap (lookup, insert, foldMap)
-
-import Quantities (Quantity, UnificationError, pow, scalar, qNegate, qAdd,
-                   qDivide, qMultiply, qSubtract, quantity, toScalar', sqrt,
-                   convertTo, errorMessage, prettyPrint, fullSimplify,
-                   derivedUnit, acos, asin, atan, sin, cos, tan, exp, ln,
-                   sinh, cosh, tanh, asinh, acosh, atanh, ceil, floor, log10,
-                   round)
-
-import Insect.Language (Func(..), BinOp(..), Expression(..), Command(..), Statement(..))
+import Debug.Trace (traceShow)
 import Insect.Environment (Environment, initialEnvironment)
+import Insect.Language (BinOp(..), Command(..), Expression(..), Func(..), Rep(..), Statement(..), Value(..))
+import Prelude hiding (degree)
 
 -- | Types of errors that may appear during evaluation.
 data EvalError
-  = UnificationError UnificationError
+  = EvaluationError String
   | LookupError String
 
 -- | A type synonym for error handling. A value of type `Expect Number` is
@@ -33,106 +27,122 @@ data EvalError
 type Expect = Either EvalError
 
 -- | Output types for highlighting.
-data MessageType = Value | ValueSet | Info | Error | Other
+data MessageType = Val | ValSet | Info | Error | Other
 
 -- | The output type of the interpreter.
 data Message = Message MessageType String
 
--- | Apply a mathematical function to a physical quantity.
-applyFunction ∷ Func → Quantity → Expect Quantity
-applyFunction fn q = lmap UnificationError $ (run fn) q
+-- | Apply a binary operation to a value.
+applyBinOp ∷ BinOp -> Value -> Value -> Value
+applyBinOp fn v1 v2 = run fn v1 v2
   where
-    run Acos  = acos
-    run Acosh = acosh
-    run Asin  = asin
-    run Asinh = asinh
-    run Atan  = atan
-    run Atanh = atanh
-    run Ceil  = ceil
-    run Cos   = cos
-    run Cosh  = cosh
-    run Exp   = exp
-    run Floor = floor
-    run Ln    = ln
-    run Log10 = log10
-    run Round = round
-    run Sin   = sin
-    run Sinh  = sinh
-    run Sqrt  = sqrt >>> pure
-    run Tan   = tan
-    run Tanh  = tanh
+    run = case _ of
+      Add       -> overValue (+)
+      Sub       -> overValue (-)
+      Mul       -> overValue (*)
+      And       -> overValue and
+      Or        -> overValue or
+      Xor       -> overValue xor
+      Shr       -> overValue shr
+      Shl       -> overValue shl
+      Sar       -> overValue \x y ->
+        let signBit = shr 31 x == 1
+            temp = shr in x + y
+      Sal       -> overValue (+)
+      ConvertTo -> overValue (const id)
 
--- | Evaluate a mathematical expression involving physical quantities.
-eval ∷ Environment → Expression → Expect Quantity
-eval env (Scalar n)      = pure $ scalar n
-eval env (Unit u)        = pure $ quantity 1.0 u
+overValue :: (Int -> Int -> Int) -> Value -> Value -> Value
+overValue fn (Value v1) (Value v2) =
+  Value $ v1 { value = fn v1.value v2.value }
+
+-- | Apply a function to a value.
+applyFunction ∷ Func -> Value -> Value
+applyFunction fn (Value v) =
+    case fn of
+      Complement -> Value $ v { value = complement v.value }
+ 
+-- | Evaluate an expression
+eval ∷ Environment -> Expression -> Expect Expression
+eval env (Scalar v)      = pure (Scalar v)
+eval env (Unit u)        = pure (Unit u)
 eval env (Variable name) =
   case lookup name env of
-    Just q → pure q
-    Nothing → Left (LookupError name)
-eval env (Negate x)      = qNegate <$> eval env x
-eval env (Apply fn x)    = eval env x >>= applyFunction fn
+    Just v -> pure (Scalar v)
+    Nothing -> Left (LookupError name)
+eval env (Apply fn x)    = eval env x >>= case _ of
+       Scalar v -> pure $ Scalar $ applyFunction fn v
+       other -> Left $ EvaluationError $ "Could not apply a function to an expression which is not reduced to a scalar.\nThe evaluation of the expression is: " <> show other
 eval env (BinOp op x y)  = do
   x' <- eval env x
   y' <- eval env y
-  (run op) x' y'
+  case { op: op, arg1: x', arg2: y' } of
+    { op: ConvertTo, arg1: Scalar v1, arg2: Unit r } ->
+      pure $ Scalar $ applyBinOp Add (Value { value: 0, rep: r }) v1
+
+    { arg1: Scalar v1, arg2: Scalar v2 } ->
+      pure $ Scalar $ applyBinOp op v1 v2
+
+    other ->
+      Left $ EvaluationError $ "Could not apply a function to expressions which are not reduced to scalars.\nThe evaluation of the expressions is: "
+        <> show other.arg1
+        <> " and "
+        <> show other.arg2
   where
-    run :: BinOp -> Quantity -> Quantity -> Expect Quantity
-    run Sub       a b = qSubtract' a b
-    run Add       a b = qAdd' a b
-    run Mul       a b = pure (qMultiply a b)
-    run Div       a b = pure (qDivide a b)
-    run Pow       a b = pow a <$> toScalar'' b
-    run ConvertTo a b = convertTo' a b
-
-    wrap ∷ ∀ a. Either UnificationError a → Either EvalError a
-    wrap = lmap UnificationError
-
-    qSubtract' q1 q2 = wrap (qSubtract q1 q2)
-    qAdd' q1 q2 = wrap (qAdd q1 q2)
-    toScalar'' q = wrap (toScalar' q)
-    convertTo' source target = wrap (convertTo source (derivedUnit target))
+    wrap ∷ forall a. Either String a -> Either EvalError a
+    wrap = lmap EvaluationError
 
 -- | Get the error message for an evaluation error.
-evalErrorMessage ∷ EvalError → String
-evalErrorMessage (UnificationError ue) = errorMessage ue
+evalErrorMessage ∷ EvalError -> String
+evalErrorMessage (EvaluationError e) = e
 evalErrorMessage (LookupError name) = "Unknown variable '" <> name <> "'"
 
 -- | Interpreter return type
 type Response = { msg ∷ Message, newEnv ∷ Environment }
 
 -- | Helper to construct an interpreter response
-message ∷ MessageType → Environment → Expect Quantity → Response
+message ∷ MessageType -> Environment -> Expect Expression -> Response
 message _ env (Left e) =
   { msg: Message Error (evalErrorMessage e)
   , newEnv: env
   }
-message mt env (Right q) =
-  { msg: Message mt (prettyPrint q)
-  , newEnv: insert "ans" q env
+message mt env (Right (Scalar v)) =
+  { msg: Message mt (prettyPrint v)
+  , newEnv: insert "ans" v env
+  }
+message _ env (Right other) =
+  { msg: Message Error $ "Result of the expression is not a scalar: " <> show other
+  , newEnv: env
   }
 
+prettyPrint :: Value -> String
+prettyPrint (Value { value, rep }) =
+  case rep of
+    Binary -> "\\b" <> toStringAs binary value
+    Hex -> "\\x" <> toStringAs hexadecimal value
+    Decimal -> toStringAs decimal value
+        
+
 -- | Run a single statement of an Insect program.
-runInsect ∷ Environment → Statement → Response
-runInsect env (Expression e) = message Value env (fullSimplify <$> eval env e)
+runInsect ∷ Environment -> Statement -> Response
+runInsect env (Expression e) = message Val env (eval env (traceShow e (const e)))
 runInsect env (Assignment n v) =
   case eval env v of
-    Left evalErr → message Error env (Left evalErr)
-    Right value → message ValueSet (insert n value env) (Right (fullSimplify value))
+    Left evalErr -> message Error env (Left evalErr)
+    Right (Scalar value) -> message ValSet (insert n value env) (Right (Scalar value))
+    Right value -> message Other env (Right value)
 runInsect env (Command Help) = { msg: Message Other (intercalate "\n"
   [ ""
-  , "*insect* evaluates mathematical expressions that can"
-  , "involve physical quantities. You can start by trying"
-  , "one of these examples:"
+  , "*binsect* evaluates binary expressions and calculations"
   , ""
-  , "   > `1920/16*9`           > `sin(30deg)`"
+  , "You can start by trying one of these examples:"
   , ""
-  , "   > `2min + 30s`          > `6Mbit/s * 1.5h -> Gb`"
+  , "  > `\\b101 + \\xa`             > `shl \\b101 1`"
   , ""
-  , "   > `list`                > `r = 80cm`"
-  , "   > `40000km/c -> ms`     > `pi*r^2 -> m^2`"
+  , "  > `complent 0 -> hex`       > `\\xff - \\b1111'1111`"
   , ""
-  , "More information: https://github.com/sharkdp/insect"
+  , "  > `minInt`                  > `maxInt`"
+  , ""
+  , "More information: https://github.com/soupi/insect"
   ]), newEnv : env }
 runInsect env (Command List) =
   { msg: Message Other list

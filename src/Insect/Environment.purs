@@ -3,24 +3,18 @@ module Insect.Environment
   , initialEnvironment
   ) where
 
+import Prelude
 import Data.StrMap (StrMap, fromFoldable)
-import Data.Tuple (Tuple(..))
-
-import Quantities (Quantity, e, pi, speedOfLight, planckConstant, hbar)
+import Data.Tuple (Tuple(Tuple))
+import Insect.Language (Rep(..), Value(..))
 
 -- | The environment consists of identifiers that are mapped to specific
 -- | quantities.
-type Environment = StrMap Quantity
+type Environment = StrMap Value
 
--- | The initial environment contains a few useful mathematical and physical
--- | constants.
 initialEnvironment ∷ Environment
 initialEnvironment = fromFoldable
-  [ Tuple "e"    e
-  , Tuple "pi"   pi
-  , Tuple "π"    pi
-  , Tuple "c"    speedOfLight
-  , Tuple "h"    planckConstant
-  , Tuple "hbar" hbar
-  , Tuple "ℏ"    hbar
+  [ Tuple "maxInt" $ Value { value: 217483647, rep: Decimal }
+  , Tuple "minInt" $ Value { value: -217483648, rep: Decimal }
+  , Tuple "minus1" $ Value { value: -1, rep: Decimal }
   ]

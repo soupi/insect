@@ -1,10 +1,7 @@
 {
-  "name": "insect",
-  "homepage": "https://github.com/sharkdp/insect",
-  "authors": [
-    "David Peter <mail@david-peter.de>"
-  ],
-  "description": "Interactive scientific calculator",
+  "name": "binsect",
+  "homepage": "https://github.com/soupi/insect",
+  "description": "Interactive binary calculator",
   "license": "MIT",
   "ignore": [
     "**/.*",
@@ -14,7 +11,6 @@
   ],
   "dependencies": {
     "purescript-prelude": "^2.4.0",
-    "purescript-quantities": "^3.1.0",
     "purescript-parsing": "^3.2.1",
     "purescript-globals": "^2.0.0",
     "purescript-maps": "^2.1.2",
