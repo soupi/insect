@@ -19,6 +19,7 @@ type Identifier = String
 -- | All available mathematical functions.
 data Func
   = Complement
+  | Negate
 
 derive instance eqFunc ∷ Eq Func
 derive instance genericFunc ∷ Generic Func

@@ -5,19 +5,19 @@ module Insect.Interpreter
   , runInsect
   ) where
 
-import Data.Array (replicate)
+import Prelude
+import Data.Array (mapWithIndex, replicate, reverse)
 import Data.Bifunctor (lmap)
 import Data.Either (Either(Right, Left))
-import Data.Foldable (intercalate)
-import Data.Int (binary, decimal, fromStringAs, hexadecimal, toStringAs)
-import Data.Int.Bits (and, complement, or, shl, shr, xor)
+import Data.Foldable (intercalate, sum)
+import Data.Int (binary, decimal, fromStringAs, hexadecimal, pow, toStringAs)
+import Data.Int.Bits (and, complement, or, xor)
 import Data.Maybe (Maybe(..), fromJust)
 import Data.StrMap (lookup, insert, foldMap)
-import Data.String (drop, fromCharArray, length, take)
+import Data.String (drop, fromCharArray, length, take, toCharArray)
 import Insect.Environment (Environment, initialEnvironment, maxInt, minInt)
 import Insect.Language (BinOp(..), Command(..), Expression(..), Func(..), Rep(..), Statement(..), Value(..))
 import Partial.Unsafe (unsafePartial)
-import Prelude hiding (degree)
 
 -- | Types of errors that may appear during evaluation.
 data EvalError
@@ -39,19 +39,66 @@ applyBinOp ∷ BinOp -> Value -> Value -> Value
 applyBinOp fn v1 v2 = run fn v1 v2
   where
     run = case _ of
-      Add       -> overValue (+)
-      Sub       -> overValue (-)
-      Mul       -> overValue (*)
-      And       -> overValue and
-      Or        -> overValue or
-      Xor       -> overValue xor
-      Shr       -> overValue shr
-      Shl       -> overValue shl
-      Sar       -> overValue \x y ->
-        let signBit = shr 31 x == 1
-            temp = shr in x + y
-      Sal       -> overValue (+)
+      Add -> overValue (+)
+      Sub -> overValue (-)
+      Mul -> overValue (*)
+      And -> overValue and
+      Or  -> overValue or
+      Xor -> overValue xor
+      Shr -> overValue myShr
+      Shl -> overValue myShl
+      Sar -> overValue \x y ->
+        if x < 0
+          then myShr x y `or` genBinaryOnesL y
+          else myShr x y `and` maxInt
+
+      Sal -> overValue \x y ->
+        if x < 0
+          then myShl x y `or` myShl 1 31
+          else myShl x y `and` maxInt
+
       ConvertTo -> overValue (const id)
+
+myShl :: Int -> Int -> Int
+myShl x y
+  | y == 0 = x
+  | y > 0 =
+    let x' = (_ <> (fromCharArray $ replicate y '0')) $ drop (2 + y) $ prettyPrint $ Value { value: x, rep: Binary }
+    in readBinary x'
+  | otherwise = myShr x (-y)
+
+myShr :: Int -> Int -> Int
+myShr x y
+  | y == 0 = x
+  | y > 0 =
+    let x' = ((fromCharArray $ replicate y '0') <> _) $ take (32 - y) $ drop 2 $ prettyPrint $ Value { value: x, rep: Binary }
+    in readBinary x'
+  | otherwise = myShl x (-y)
+
+genBinaryOnesR :: Int -> Int
+genBinaryOnesR n =
+  sum
+  <<< mapWithIndex (\i d -> d * (2 `pow` i))
+  $ replicate n 1
+
+genBinaryOnesL :: Int -> Int
+genBinaryOnesL n =
+  sum
+  <<< mapWithIndex (\i d -> d * (2 `pow` i))
+  $ replicate (32 - n) 0 <> replicate n 1
+
+readBinary :: String -> Int
+readBinary s =
+  sum
+  <<< mapWithIndex (\i d -> d * (2 `pow` i))
+  <<< reverse
+  <<< map (\c -> unsafePartial $ fromBinaryChar c)
+  $ toCharArray s
+
+fromBinaryChar :: Partial => Char -> Int
+fromBinaryChar = case _ of
+  '0' -> 0
+  '1' -> 1
 
 overValue :: (Int -> Int -> Int) -> Value -> Value -> Value
 overValue fn (Value v1) (Value v2) =
@@ -62,6 +109,7 @@ applyFunction ∷ Func -> Value -> Value
 applyFunction fn (Value v) =
     case fn of
       Complement -> Value $ v { value = complement v.value }
+      Negate -> Value $ v { value = negate v.value }
  
 -- | Evaluate an expression
 eval ∷ Environment -> Expression -> Expect Expression
@@ -139,14 +187,11 @@ prettyPrint (Value { value, rep }) =
           let s = toStringAs hexadecimal value
           in fromCharArray (replicate (8 - length s) '0') <> s
         else
-          if value == minInt
-            then "ffffffff"
-            else
-              let str = toStringAs hexadecimal (maxInt + value + 1)
-              in
-                if length str < 8
-                  then "8" <> fromCharArray (replicate (8 - length str - 1) '0') <> str
-                  else toStringAs hexadecimal ((unsafePartial $ fromJust $ fromStringAs hexadecimal $ take 1 str) `or` 8) <> drop 1 str
+          let str = toStringAs hexadecimal (maxInt + value + 1)
+          in
+            if length str < 8
+              then "8" <> fromCharArray (replicate (8 - length str - 1) '0') <> str
+              else toStringAs hexadecimal ((unsafePartial $ fromJust $ fromStringAs hexadecimal $ take 1 str) `or` 8) <> drop 1 str
 
 
 -- | Run a single statement of an Insect program.

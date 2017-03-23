@@ -183,7 +183,8 @@ binOpName =
 -- | Parse the name of a mathematical function.
 funcName ∷ P Func
 funcName =
-  (string "complement" *> pure Complement)
+      (string "complement" *> pure Complement)
+  <|> (string "negate" *> pure Negate)
 
 -- | Parse a representation unit.
 rep :: P Rep
@@ -214,13 +215,14 @@ expression =
   fix \p ->
     let
       atomic ∷ P Expression
-      atomic = whiteSpace *> (
+      atomic = fix \a ->
+        whiteSpace *> (
               parens p
           <|> (Scalar <$> (char '\\' *> (hexNumber <|> binNumber)))
           <|> (Scalar <$> number)
           <|> try (Unit <$> rep)
-          <|> try (BinOp <$> binOpName <*> p <*> p)
-          <|> try (Apply <$> funcName <*> (whiteSpace *> p))
+          <|> try (BinOp <$> binOpName <*> a <*> a)
+          <|> try (Apply <$> funcName <*> (whiteSpace *> a))
           <|> variable
           ) <* whiteSpace
 

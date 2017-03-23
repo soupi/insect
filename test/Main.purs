@@ -129,6 +129,13 @@ main = runTest do
         , "  2  ->  binary "
         ]
 
+    test "Functions + Conversions" do
+      allParseAs (Expression (BinOp ConvertTo (BinOp Add (Scalar $ decV 1) (Scalar $ decV 2)) (Unit Binary)))
+        [ "add 1 2 -> binary"
+        , "(add 1 2) -> binary"
+        , "(add ( 1) 2) -> binary"
+        ]
+
       shouldFail "2->"
 
   suite "Parser - Identifiers" do
@@ -157,7 +164,6 @@ main = runTest do
         , "  xyz_123  =  1  "
         ]
 
-      shouldFail "x²=3"
       shouldFail "x+y=3"
       shouldFail "x+2=3"
       shouldFail "3=5"
