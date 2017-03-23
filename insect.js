@@ -23386,7 +23386,7 @@ var PS = {};
           };
           if (v instanceof Insect_Language.Command && v.value0 instanceof Insect_Language.Help) {
               return {
-                  msg: new Message(Other.value, Data_Foldable.intercalate(Data_Foldable.foldableArray)(Data_Monoid.monoidString)("\x0a")([ "", "*binsect* evaluates binary expressions and calculations", "", "You can start by trying one of these examples:", "", "  > `\\b101 + \\xa`             > `shl \\b101 1`", "", "  > `complent 0 -> hex`       > `\\xff - \\b1111'1111`", "", "  > `minInt`                  > `maxInt`", "", "More information: https://github.com/soupi/insect" ])), 
+                  msg: new Message(Other.value, Data_Foldable.intercalate(Data_Foldable.foldableArray)(Data_Monoid.monoidString)("\x0a")([ "", "*binsect* evaluates binary expressions and calculations", "", "You can start by trying one of these examples:", "", "  > `\\b101 + \\xa`             > `shl \\b101 1`", "", "  > `complement 0 -> hex`     > `\\xff - \\b1111'1111`", "", "  > `minInt`                  > `maxInt`", "", "More information: https://github.com/soupi/insect" ])), 
                   newEnv: env
               };
           };
