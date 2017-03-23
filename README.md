@@ -11,7 +11,7 @@ A fast, repl-style binary calculator for the web and for the terminal.
 Features
 --------
   Supported functions: `add`, `sub`, `mul`, `and`, `or`, `xor`,
-  `shr`, `shl`, `complement`.
+  `shr`, `shl`, `sar`, sal`, `complement`, `negate`.
 
 - Explicit representation conversions
   ```
@@ -19,6 +19,8 @@ Features
   \b101 -> hex
   32 -> binary
   ```
+
+- Binary numbers represented as [two's complement](https://en.wikipedia.org/wiki/Two's_complement)
 
 - Variable assigments:
   Predefined constants: maximum and minimum 32bit int value (`maxInt`), (`minInt`), ...
