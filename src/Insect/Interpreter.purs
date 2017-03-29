@@ -7,14 +7,14 @@ module Insect.Interpreter
 
 import Prelude
 import Data.Array (mapWithIndex, replicate, reverse)
-import Data.Bifunctor (lmap)
 import Data.Either (Either(Right, Left))
 import Data.Foldable (intercalate, sum)
 import Data.Int (binary, decimal, fromStringAs, hexadecimal, pow, toStringAs)
 import Data.Int.Bits (and, complement, or, xor)
+import Data.List (List(..), fromFoldable, (:))
 import Data.Maybe (Maybe(..), fromJust)
 import Data.StrMap (lookup, insert, foldMap)
-import Data.String (drop, fromCharArray, length, take, toCharArray)
+import Data.String (drop, fromCharArray, length, take, toCharArray, toLower)
 import Insect.Environment (Environment, initialEnvironment, maxInt, minInt)
 import Insect.Language (BinOp(..), Command(..), Expression(..), Func(..), Rep(..), Statement(..), Value(..))
 import Partial.Unsafe (unsafePartial)
@@ -133,13 +133,41 @@ eval env (BinOp op x y)  = do
       pure $ Scalar $ applyBinOp op v1 v2
 
     other ->
-      Left $ EvaluationError $ "Could not apply a function to expressions which are not reduced to scalars.\nThe evaluation of the expressions is: "
+      Left $ EvaluationError $
+        """Could not apply a function to expressions which are not reduced to scalars.
+The evaluation of the expressions is: """
         <> show other.arg1
         <> " and "
         <> show other.arg2
+
+
+eval env (Func f xs) = do
+  go (fromFoldable xs)
   where
-    wrap ∷ forall a. Either String a -> Either EvalError a
-    wrap = lmap EvaluationError
+    go = case _ of
+      Nil ->
+        Left $ EvaluationError $ "Unexpected Arity. " <> toLower (show f) <> " expects at least 1 argument."
+
+      x : Nil -> eval env x
+
+      x : y : rest -> do
+        x' <- eval env x
+        y' <- eval env y
+        case { op: f, arg1: x', arg2: y' } of
+          { op: ConvertTo, arg1: Scalar v1, arg2: Unit r } ->
+            go (Scalar (applyBinOp Add (Value { value: 0, rep: r }) v1) : rest)
+
+          { arg1: Scalar v1, arg2: Scalar v2 } ->
+            go (Scalar (applyBinOp f v1 v2) : rest)
+
+          other ->
+            Left $ EvaluationError $
+              """Could not apply a function to expressions which are not reduced to scalars.
+The evaluation of the expressions is: """
+              <> show other.arg1
+              <> " and "
+              <> show other.arg2
+
 
 -- | Get the error message for an evaluation error.
 evalErrorMessage ∷ EvalError -> String

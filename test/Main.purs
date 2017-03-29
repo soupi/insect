@@ -9,7 +9,7 @@ import Data.Foldable (traverse_)
 
 import Insect (repl)
 import Insect.Environment (Environment)
-import Insect.Language (BinOp(ConvertTo, Sub, Add, Mul), Expression(Scalar, Variable, Unit, BinOp), Rep(Binary, Hex, Decimal), Statement(Assignment, Expression), Value(Value))
+import Insect.Language (BinOp(ConvertTo, Sub, Add, Mul), Expression(Scalar, Variable, Unit, Func, BinOp), Rep(Binary, Hex, Decimal), Statement(Assignment, Expression), Value(Value))
 import Insect.Parser (parseInsect)
 import Test.Unit (suite, test, failure)
 import Test.Unit.Console (TESTOUTPUT)
@@ -130,10 +130,17 @@ main = runTest do
         ]
 
     test "Functions + Conversions" do
-      allParseAs (Expression (BinOp ConvertTo (BinOp Add (Scalar $ decV 1) (Scalar $ decV 2)) (Unit Binary)))
+      allParseAs (Expression (BinOp ConvertTo (Func Add [Scalar $ decV 1, Scalar $ decV 2]) (Unit Binary)))
         [ "add 1 2 -> binary"
         , "(add 1 2) -> binary"
         , "(add ( 1) 2) -> binary"
+        ]
+
+    test "Functions with 3 arguments + Conversions" do
+      allParseAs (Expression (BinOp ConvertTo (Func Add [Scalar $ decV 1, Scalar $ decV 2, Scalar $ decV 3]) (Unit Binary)))
+        [ "add 1 2 3 -> binary"
+        , "(add 1 2 3) -> binary"
+        , "(add ( 1) 2 (3)) -> binary"
         ]
 
       shouldFail "2->"

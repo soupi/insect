@@ -9,7 +9,7 @@ import Data.Array (filter, length, mapWithIndex, reverse, singleton, some)
 import Data.Either (Either)
 import Data.Foldable (foldr, sum)
 import Data.Int (fromString, fromStringAs, hexadecimal, pow)
-import Data.List (List, many, init, last)
+import Data.List (List(..), foldMap, init, last, many, (:))
 import Data.Maybe (Maybe(..))
 import Data.NonEmpty (NonEmpty, (:|), foldl1)
 import Data.String (fromCharArray)
@@ -17,7 +17,7 @@ import Data.Traversable (traverse)
 import Insect.Language (BinOp(..), Command(..), Expression(..), Func(..), Rep(..), Statement(..), Value(..))
 import Text.Parsing.Parser (ParserT, Parser, ParseError, runParser, fail)
 import Text.Parsing.Parser.Combinators (try, (<?>))
-import Text.Parsing.Parser.String (char, eof, oneOf, string)
+import Text.Parsing.Parser.String (anyChar, char, eof, oneOf, string)
 import Text.Parsing.Parser.Token (GenLanguageDef(..), LanguageDef, TokenParser, digit, letter, makeTokenParser)
 import Prelude hiding (degree)
 
@@ -85,8 +85,10 @@ number = do
 -- | Parse a binary number.
 binNumber ∷ P Value
 binNumber = do
-  void $ char 'b'
   ds <-  filter (_ /= '\'') <$> some (oneOf binDigit <?> "a binary digit")
+  void $
+    (oneOf hexDigit >>= fail <<< \c -> "Unexpected digit " <> show c <> ".\nBinary numbers can only contain 0s or 1s.\n\nError found")
+    <|> pure unit
   when (length ds > 32) $
     fail $ "Binary numbers are limited to 32 bits which means 32 binary digits long. '\\b" <> fromCharArray ds <> "' is "
       <> show (length ds) <> " digits long."
@@ -114,7 +116,6 @@ binDigit =
 -- | Parse a hexadecimal number.
 hexNumber ∷ P Value
 hexNumber = do
-  void $ char 'x'
   ds <- filter (_ /= '\'') <$> some (oneOf hexDigit <?> "a hexadecimal digit")
   when (length ds > 8) $
     fail $ "Hexadecimal numbers are limited to 32 bits which means 8 hexadecimal digits long. '\\x" <> fromCharArray ds <> "' is "
@@ -209,6 +210,29 @@ foldr1 f (a :| xs) =
     Just bs, Just b -> f a (foldr f b bs)
     _, _ -> a
 
+
+basedNumber :: P Value
+basedNumber = do
+  myOneOf parserList parserList
+  where
+    parserList =
+        { char: 'x', desc: "hex", parser: hexNumber }
+      : { char: 'b', desc: "binary", parser: binNumber }
+      : { char: 'd', desc: "decimal", parser: number }
+      : Nil
+    myOneOf list = case _ of
+      p:ps -> do
+        (char p.char *> p.parser) <|> myOneOf list ps
+
+      Nil -> do
+        c <- anyChar
+        fail $
+          "Unexpected character " <> show c
+          <> ".\nExpecting one of the following:\n\n"
+          <> foldMap (\p -> "  * " <> show p.char <> " for " <> p.desc <> "\n") list
+          <> "\nError found"
+
+
 -- | Parse a full mathematical expression.
 expression ∷ P Expression
 expression =
@@ -218,13 +242,15 @@ expression =
       atomic = fix \a ->
         whiteSpace *> (
               parens p
-          <|> (Scalar <$> (char '\\' *> (hexNumber <|> binNumber)))
+          <|> (Scalar <$> (char '\\' *> basedNumber))
           <|> (Scalar <$> number)
-          <|> try (Unit <$> rep)
-          <|> try (BinOp <$> binOpName <*> a <*> a)
-          <|> try (Apply <$> funcName <*> (whiteSpace *> a))
+          <|> (Unit <$> rep)
+          <|> (Func  <$> binOpName <*> some a)
+          <|> (BinOp <$> binOpName <*> a <*> a)
+          <|> (Apply <$> funcName <*> (whiteSpace *> a))
           <|> variable
-          ) <* whiteSpace
+          <|> fail "Expecting an expression"
+          ) <* (whiteSpace <|> eof)
 
       sepByMul ∷ P Expression
       sepByMul = foldl1 (BinOp Mul) <$> atomic `sepBy1` mulOp

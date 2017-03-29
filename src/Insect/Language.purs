@@ -10,6 +10,7 @@ module Insect.Language
   , Statement(..)
   ) where
 
+import Data.Foldable (intercalate)
 import Data.Generic (class Generic, gEq, gShow)
 import Prelude hiding (Unit)
 
@@ -50,6 +51,7 @@ data Expression
   | Variable Identifier
   | Unit Rep
   | Apply Func Expression
+  | Func BinOp (Array Expression)
   | BinOp BinOp Expression Expression
 
 derive instance eqExpression ∷ Eq Expression
@@ -59,6 +61,7 @@ instance showExpression ∷ Show Expression where
   show (Variable n)   = "(Variable " <> show n <> ")"
   show (Apply fn x)   = "(Apply " <> show fn <> " " <> show x <> ")"
   show (BinOp op x y) = "(BinOp " <> show op <> " " <> show x <> " " <> show y <> ")"
+  show (Func f xs)    = "(Func "  <> show f  <> " [" <> intercalate ", " (map show xs) <> "]" <> ")"
 
 newtype Value = Value
   { value :: Int
